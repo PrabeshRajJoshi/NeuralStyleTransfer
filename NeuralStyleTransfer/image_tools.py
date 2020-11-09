@@ -170,15 +170,12 @@ class StyleTransferLoss:
         pass
     
 
-    def compute_loss(self,
-                     base_image=None,
-                     style_reference_image=None,
-                     combination_image=None):
+    def compute_loss(self):
         '''
         Method to compute the total loss during style transfer to base(content) image.
         '''
         input_tensor = tf.concat(
-            [base_image, style_reference_image, combination_image], axis=0
+            [self.base_image, self.style_image, self.combination_image], axis=0
         )
         features = self.feature_extractor(input_tensor)
 
@@ -195,12 +192,26 @@ class StyleTransferLoss:
         # Add style loss
         for layer_name in self.style_layer_names:
             layer_features = features[layer_name]
-            style_reference_features = layer_features[1, :, :, :]
+            style_features = layer_features[1, :, :, :]
             combination_features = layer_features[2, :, :, :]
-            sl = style_loss(style_reference_features, combination_features)
+            sl = style_loss(style_features, combination_features)
             loss += (self.style_weight / len(self.style_layer_names)) * sl
 
         # Add total variation loss
-        loss += self.total_variation_weight * total_variation_loss(combination_image, nrows=base_image.shape[1], ncols=base_image.shape[2] )
+        loss += self.total_variation_weight * total_variation_loss(self.combination_image, nrows=self.base_image.shape[1], ncols=self.base_image.shape[2] )
         return loss
+    
+    @tf.function
+    def compute_loss_and_grads(self, base_image=None, style_image=None, combination_image=None):
+        '''
+        Method with a tf.function decorator for loss & gradient computation
+        THe decorator is used to compile it, and thus make it fast.
+        '''
+        self.base_image = base_image
+        self.style_image = style_image
+        self.combination_image = combination_image
+        with tf.GradientTape() as tape:
+            loss = self.compute_loss()
+        grads = tape.gradient(loss, combination_image)
+        return loss, grads
 
