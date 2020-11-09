@@ -117,6 +117,7 @@ def total_variation_loss(x, nrows=None, ncols=None):
 
 class StyleTransferLoss:
     def __init__(self):
+        # set the names of layers that will be used for loss computations
         self.style_layer_names = [
                                 "block1_conv1",
                                 "block2_conv1",
@@ -125,11 +126,16 @@ class StyleTransferLoss:
                                 "block5_conv1",
                                 ]
         self.content_layer_name = "block5_conv2"
+
+        # Set the weights of the different loss components
         self.total_variation_weight = 1e-6
         self.style_weight = 1e-6
         self.content_weight = 2.5e-8
 
     def setup_feature_extractor(self):
+        '''
+        Method to setup the model that retrieves the intermediate activations of VGG19 (as a dict, by name).
+        '''
         # Build a VGG19 model loaded with pre-trained ImageNet weights
         model = vgg19.VGG19(weights="imagenet", include_top=False)
 
@@ -142,15 +148,25 @@ class StyleTransferLoss:
     
 
     def get_layer_names(self):
+        '''
+        Method to retrieve the names of model layers as a list.
+        This helps decide which layers to choose for loss computation.
+        '''
         if self.outputs_dict:
             return list(self.outputs_dict.keys())
         else:
             print("Use setup_feature_extractor first!")
     
     def set_style_layer_names(self):
+        '''
+        Method to set the list of layer-names (one or more) used to compute style loss
+        '''
         pass
     
     def set_content_layer_name(self):
+        '''
+        Method to set the name of the layer (only one) used to compute content loss
+        '''
         pass
     
 
@@ -158,6 +174,9 @@ class StyleTransferLoss:
                      base_image=None,
                      style_reference_image=None,
                      combination_image=None):
+        '''
+        Method to compute the total loss during style transfer to base(content) image.
+        '''
         input_tensor = tf.concat(
             [base_image, style_reference_image, combination_image], axis=0
         )
