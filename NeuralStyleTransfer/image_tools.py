@@ -79,11 +79,9 @@ def gram_matrix(x):
 
 def style_loss(style, combination):
     '''
-    The "style loss" is designed to maintain
-    the style of the reference image in the generated image.
-    It is based on the gram matrices (which capture style) of
-    feature maps from the style reference image
-    and from the generated image
+    The "style loss" is designed to maintain the style of the reference image 
+    in the generated image. It is based on the gram matrices (which capture style) 
+    of feature maps from the style reference image and from the generated image
     '''
     S = gram_matrix(style)
     C = gram_matrix(combination)
@@ -96,8 +94,7 @@ def style_loss(style, combination):
 
 def content_loss(base, combination):
     '''
-    An auxiliary loss function
-    designed to maintain the "content" of the
+    An auxiliary loss function designed to maintain the "content" of the
     base image in the generated image
     '''
     return tf.reduce_sum(tf.square(combination - base))
@@ -117,4 +114,74 @@ def total_variation_loss(x, nrows=None, ncols=None):
     )
     return tf.reduce_sum(tf.pow(a + b, 1.25))
 
+
+class StyleTransferLoss:
+    def __init__(self):
+        self.style_layer_names = [
+                                "block1_conv1",
+                                "block2_conv1",
+                                "block3_conv1",
+                                "block4_conv1",
+                                "block5_conv1",
+                                ]
+        self.content_layer_name = "block5_conv2"
+        self.total_variation_weight = 1e-6
+        self.style_weight = 1e-6
+        self.content_weight = 2.5e-8
+
+    def setup_feature_extractor(self):
+        # Build a VGG19 model loaded with pre-trained ImageNet weights
+        model = vgg19.VGG19(weights="imagenet", include_top=False)
+
+        # Get the symbolic outputs of each "key" layer (we gave them unique names).
+        self.outputs_dict = dict([(layer.name, layer.output) for layer in model.layers])
+
+        # Set up a model that returns the activation values for every layer in
+        # VGG19 (as a dict).
+        self.feature_extractor = keras.Model(inputs=model.inputs, outputs=self.outputs_dict)
+    
+
+    def get_layer_names(self):
+        if self.outputs_dict:
+            return list(self.outputs_dict.keys())
+        else:
+            print("Use setup_feature_extractor first!")
+    
+    def set_style_layer_names(self):
+        pass
+    
+    def set_content_layer_name(self):
+        pass
+    
+
+    def compute_loss(self,
+                     base_image=None,
+                     style_reference_image=None,
+                     combination_image=None):
+        input_tensor = tf.concat(
+            [base_image, style_reference_image, combination_image], axis=0
+        )
+        features = self.feature_extractor(input_tensor)
+
+        # Initialize the loss
+        loss = tf.zeros(shape=())
+
+        # Add content loss
+        layer_features = features[self.content_layer_name]
+        base_image_features = layer_features[0, :, :, :]
+        combination_features = layer_features[2, :, :, :]
+        loss = loss + self.content_weight * content_loss(
+            base_image_features, combination_features
+        )
+        # Add style loss
+        for layer_name in self.style_layer_names:
+            layer_features = features[layer_name]
+            style_reference_features = layer_features[1, :, :, :]
+            combination_features = layer_features[2, :, :, :]
+            sl = style_loss(style_reference_features, combination_features)
+            loss += (self.style_weight / len(self.style_layer_names)) * sl
+
+        # Add total variation loss
+        loss += self.total_variation_weight * total_variation_loss(combination_image, nrows=base_image.shape[1], ncols=base_image.shape[2] )
+        return loss
 
